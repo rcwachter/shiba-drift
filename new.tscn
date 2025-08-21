@@ -1,0 +1,65 @@
+[gd_scene load_steps=7 format=3 uid="uid://b28qrtxekxrrh"]
+
+[ext_resource type="Script" uid="uid://b54sctylgdhtc" path="res://vehicle.gd" id="1_vsjny"]
+[ext_resource type="PackedScene" uid="uid://c87jf7hgietdn" path="res://ae_86.tscn" id="2_mgtde"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_mgtde"]
+size = Vector3(2.8479, 1.95166, 7.40643)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_vsjny"]
+size = Vector3(81.5799, 1, 146.137)
+
+[sub_resource type="BoxMesh" id="BoxMesh_mgtde"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vsjny"]
+albedo_color = Color(0.184843, 0.0936665, 0.00409996, 1)
+
+[node name="Main" type="Node3D"]
+
+[node name="Car" type="VehicleBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.17466, 0)
+script = ExtResource("1_vsjny")
+
+[node name="ae88" parent="Car" instance=ExtResource("2_mgtde")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0326772, 0.968964)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Car"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0206299, 0.201904, 0.864986)
+shape = SubResource("BoxShape3D_mgtde")
+
+[node name="FrontLeftWheel" type="VehicleWheel3D" parent="Car"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 1.40253, -0.610913, -1.4288)
+use_as_steering = true
+
+[node name="FrontRightWheel" type="VehicleWheel3D" parent="Car"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -1.403, -0.611106, -1.42858)
+use_as_steering = true
+
+[node name="RearRightWheel" type="VehicleWheel3D" parent="Car"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, -1.403, -0.611, 2.95321)
+use_as_traction = true
+
+[node name="RearLeftWheel" type="VehicleWheel3D" parent="Car"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 1.40274, -0.611, 2.95358)
+use_as_traction = true
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Car"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.03114, -3.94795)
+
+[node name="Camera3D" type="Camera3D" parent="Car/SpringArm3D"]
+transform = Transform3D(1, 0, 0, 0, 0.876307, 0.481754, 0, -0.481754, 0.876307, 0, 2.89423, 12.4132)
+fov = 80.0
+
+[node name="Track" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Track"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.18887, 0, 41.5359)
+shape = SubResource("BoxShape3D_vsjny")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Track"]
+transform = Transform3D(81.5799, 0, 0, 0, 1, 0, 0, 0, 146.137, 8.18887, 0, 41.5359)
+mesh = SubResource("BoxMesh_mgtde")
+surface_material_override/0 = SubResource("StandardMaterial3D_vsjny")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -0.636805, 0.771025, 0, -0.771025, -0.636805, 0, 10.9738, 0)

@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://c87jf7hgietdn"]
+
+[ext_resource type="PackedScene" uid="uid://dcl6264snvov3" path="res://models/ae86.glb" id="1_fllqv"]
+
+[node name="ae86" instance=ExtResource("1_fllqv")]
