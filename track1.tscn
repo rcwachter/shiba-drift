@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://fvjagms2khph"]
+
+[ext_resource type="PackedScene" uid="uid://ci52bv1m15cbs" path="res://images/cars/Doge.tscn" id="1_g8jpq"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_jjbyn"]
+size = Vector3(81.5799, 1, 146.137)
+
+[sub_resource type="BoxMesh" id="BoxMesh_g8jpq"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ejmrh"]
+albedo_color = Color(0.184843, 0.0936665, 0.00409996, 1)
+
+[node name="Track1" type="Node3D"]
+
+[node name="Track" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Track"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.18887, 0, 41.5359)
+shape = SubResource("BoxShape3D_jjbyn")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Track"]
+transform = Transform3D(81.5799, 0, 0, 0, 1, 0, 0, 0, 146.137, 8.18887, 0, 41.5359)
+mesh = SubResource("BoxMesh_g8jpq")
+surface_material_override/0 = SubResource("StandardMaterial3D_ejmrh")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -0.636805, 0.771025, 0, -0.771025, -0.636805, 0, 10.9738, 0)
+
+[node name="Car" parent="." instance=ExtResource("1_g8jpq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.30834, 0)
