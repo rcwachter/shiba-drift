@@ -17,12 +17,9 @@ extends VehicleBody3D
 
 # Stronger in lower gears, weaker in higher gears
 const GEAR_TORQUE_MULT: Array[float] = [3.0, 2.1, 1.6, 1.25, 1.0]
-# Optional global scaler if you want all gears stronger/weaker without touching the array
 @export var GEAR_TORQUE_SCALE: float = 1.0
 
 @export var AUTO_UP_AT_TOP_RATIO: float = 0.92  # upshift when >= 92% of the gear's top speed
-
-
 
 # --- Downshift overspeed smoothing ---
 @export var DOWNSHIFT_SMOOTH_TIME: float = 1.0  # seconds
@@ -58,6 +55,13 @@ var shift_cooldown: float = 0.0
 @onready var EngineSound: AudioStreamPlayer = $EngineSound
 @onready var ScreechSound: AudioStreamPlayer = $ScreechSound
 
+# >>> Bark sound (plays every 1s above 7800 RPM)
+const BARK_RPM_THRESHOLD: float = 7800.0
+const BARK_INTERVAL: float = 1.0
+const BARK_STREAM: AudioStream = preload("res://sounds/bark.mp3")
+var bark_timer: float = 0.0
+var BarkSound: AudioStreamPlayer
+
 # --- Tachometer (needle rotation: 0deg at 0rpm, +240deg at 8000rpm) ---
 @export var TACH_SWEEP_DEG: float = 240.0
 @export var TACH_MAX_RPM: float = REDLINE_RPM
@@ -92,6 +96,15 @@ func _ready() -> void:
 		push_warning("Tach needle path not found: " + str(tach_needle_path))
 	_update_hud_mode()
 	_update_hud_gear()
+
+	# Setup BarkSound (auto-creates the node if you didn't add one in the scene)
+	if has_node("BarkSound"):
+		BarkSound = $BarkSound
+	else:
+		BarkSound = AudioStreamPlayer.new()
+		BarkSound.name = "BarkSound"
+		add_child(BarkSound)
+	BarkSound.stream = BARK_STREAM
 
 # ===================== TICK =====================
 func _physics_process(delta: float) -> void:
@@ -147,19 +160,26 @@ func _physics_process(delta: float) -> void:
 	var rpm_lerp_t: float = clamp(10.0 * delta, 0.0, 1.0)
 	engine_rpm = lerp(engine_rpm, target_rpm, rpm_lerp_t)
 
-		# ---------------- Auto shifting (shifts even under throttle) ----------------
+	# --- Bark on high RPM (every 1s above 7800 RPM) ---
+	if engine_rpm > BARK_RPM_THRESHOLD:
+		bark_timer += delta
+		if bark_timer >= BARK_INTERVAL:
+			bark_timer -= BARK_INTERVAL
+			if BarkSound:
+				BarkSound.play()
+	else:
+		bark_timer = 0.0
+
+	# ---------------- Auto shifting (shifts even under throttle) ----------------
 	if is_automatic and shift_cooldown <= 0.0:
 		var current_top_kmh: float = GEARS_MAX_KMH[gear - 1]
 		var near_gear_top: bool = speed_kmh >= (current_top_kmh * AUTO_UP_AT_TOP_RATIO)
 		var on_throttle: bool = accel_input and not reverse_input
 
-		# Upshift if near redline OR simply near the gear's top speed (under load or coasting)
 		if (engine_rpm >= AUTO_UPSHIFT_RPM or near_gear_top) and gear < GEARS_MAX_KMH.size():
 			_shift_up()
-		# Downshift when lugging, but avoid doing it while the player is hard on throttle to prevent hunting
 		elif (engine_rpm <= AUTO_DOWNSHIFT_RPM) and gear > 1 and not on_throttle:
 			_shift_down()
-
 
 	# ---------------- Engine sound pitch from RPM ----------------
 	if EngineSound:
@@ -167,16 +187,9 @@ func _physics_process(delta: float) -> void:
 		EngineSound.pitch_scale = pitch
 
 	# ---------------- Apply forces ----------------
-		# ---------------- Apply forces ----------------
 	var torque_scale: float = _torque_curve(engine_rpm)
-
-	# Gear-based torque: lower gears multiply more
 	var gear_mul: float = GEAR_TORQUE_MULT[gear - 1] * GEAR_TORQUE_SCALE
-
-	# As you approach the current gear's top speed, fade force so you can't overshoot
 	var headroom: float = clamp(1.0 - speed_ratio, 0.0, 1.0)
-
-	# Slight taper at very high road speeds to prevent unrealistic late-gear surge
 	var aero_taper: float = clamp(1.0 - (speed_kmh / 300.0), 0.5, 1.0)
 
 	if accel_input:
@@ -184,9 +197,8 @@ func _physics_process(delta: float) -> void:
 		engine_force = drive_force
 		brake = 0.0
 	elif reverse_input:
-		# Give reverse a reasonable (lower) "ratio"
 		if fwd_mps >= -1.0:
-			engine_force = -THROTTLE_FORCE * 0.9 * 1.6   # 1.6 ~ like a "reverse gear"
+			engine_force = -THROTTLE_FORCE * 0.9 * 1.6
 			brake = 0.0
 		else:
 			engine_force = 0.0
@@ -194,7 +206,6 @@ func _physics_process(delta: float) -> void:
 	else:
 		engine_force = 0.0
 		brake = 0.0
-
 
 	# ---------------- Drift behavior ----------------
 	if drifting:
@@ -269,14 +280,12 @@ func _shift_down() -> void:
 		shift_cooldown = SHIFT_COOLDOWN
 		_update_hud_gear()
 
-		# Begin downshift smoothing if above the new gear's top speed
 		if speed_kmh > new_top + 0.1:
 			downshift_smooth_timer = DOWNSHIFT_SMOOTH_TIME
 			downshift_from_kmh = speed_kmh
 			downshift_to_kmh = new_top
 			downshift_allowed_kmh = downshift_from_kmh
 
-# torque curve (broad powerband peaking ~70% of redline)
 func _torque_curve(rpm: float) -> float:
 	var x: float = clamp(rpm / REDLINE_RPM, 0.0, 1.0)
 	var peak: float = 0.7
@@ -284,12 +293,10 @@ func _torque_curve(rpm: float) -> float:
 	var val: float = 1.0 - pow(abs(x - peak) / width, 2.0)
 	return clamp(val, 0.2, 1.0)
 
-# tach needle mapping
 func _rpm_to_deg(rpm: float) -> float:
 	var r: float = clamp(rpm, 0.0, TACH_MAX_RPM)
 	return (r / TACH_MAX_RPM) * TACH_SWEEP_DEG + TACH_OFFSET_DEG
 
-# HUD helpers
 func _update_hud_gear() -> void:
 	if has_node("Hud/gear"):
 		$Hud/gear.text = str(gear)
