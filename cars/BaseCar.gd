@@ -74,7 +74,6 @@ var BarkSound: AudioStreamPlayer
 @export var YAW_DAMP_BASE: float = 0.2             # baseline angular damping
 @export var YAW_DAMP_MAX: float = 2.2              # angular damping when very sideways
 
-
 # --- Tachometer (needle rotation: 0deg at 0rpm, +240deg at 8000rpm) ---
 @export var TACH_SWEEP_DEG: float = 240.0
 @export var TACH_MAX_RPM: float = REDLINE_RPM
@@ -84,18 +83,23 @@ var BarkSound: AudioStreamPlayer
 @onready var TachNeedle: Node2D = get_node_or_null(tach_needle_path)
 
 # --- Low-gear slide assist (turn-to-drift in gears 1-2) ---
-@export var LG_SLIDE_MIN_SPEED_KMH: float = 20.0   # only enable slide above this speed
-@export var LG_STEER_THRESHOLD: float = 0.12       # how much steer before we start sliding (0..1 of max)
-@export var LG_REAR_SLIP: float = 1.3              # lower than BASE_TIRE_GRIP = less rear grip (more slide)
-@export var LG_FRONT_SLIP: float = 3.2             # slightly above base = better front bite/steer control
-@export var LG_BLEND_SPEED: float = 8.0            # how fast the wheels blend to targets
+@export var LG_SLIDE_MIN_SPEED_KMH: float = 10.0   # slide available almost right away
+@export var LG_STEER_THRESHOLD: float = 0.07       # start sliding with light steering
+@export var LG_REAR_SLIP: float = 0.8              # much less grip in the rear
+@export var LG_FRONT_SLIP: float = 3.8             # strong front bite for rotation
+@export var LG_BLEND_SPEED: float = 14.0           # quick transition into slide
 
+# --- Extra torque model to "bog" in tall gears ---
+@export var BOG_RPM_END: float = 3000.0            # below this, we taper torque hard
+@export var BOG_POWER: float = 1.6                 # exponent; higher = weaker at low rpm
+const GEAR_BOG_FACTOR: Array[float] = [1.0, 0.85, 0.65, 0.50, 0.38]  # additional cut in tall gears
 
 # --- State ---
 var steer_target: float = 0.0
 var was_drifting: bool = false
 var engine_rpm: float = IDLE_RPM
 var target_rpm: float = IDLE_RPM
+var lowgear_slide_active: bool = false
 
 # ===================== INPUT =====================
 func _input(event: InputEvent) -> void:
@@ -115,13 +119,12 @@ func _ready() -> void:
 		EngineSound.play()
 	if TachNeedle == null:
 		push_warning("Tach needle path not found: " + str(tach_needle_path))
-		
-	linear_damp = 0.08    # slows down forward movement
-	angular_damp = 0.2   # helps reduce spin-outs
+	linear_damp = 0.15
+	angular_damp = 0.3
 	_update_hud_mode()
 	_update_hud_gear()
 
-	# Setup BarkSound (auto-creates the node if you didn't add one in the scene)
+	# Bark sound player
 	if has_node("BarkSound"):
 		BarkSound = $BarkSound
 	else:
@@ -161,6 +164,39 @@ func _physics_process(delta: float) -> void:
 
 	steering = move_toward(steering, steer_target * steer_limit, base_speed * delta)
 
+	# --- Low-gear turn-to-drift (gears 1-2) ---
+	var steer_abs: float = abs(steering)
+	var steer_norm: float = 0.0
+	if STEER_LIMIT != 0.0:
+		var base_limit2: float = (DRIFT_STEER_LIMIT if drifting else STEER_LIMIT)
+		var t2: float = clamp(speed_kmh / HIGH_SPEED_KMH, 0.0, 1.0)
+		var speed_factor2: float = lerp(1.0, HIGH_SPEED_STEER_MIN, t2)
+		var steer_limit_now: float = base_limit2 * speed_factor2
+		steer_norm = steer_abs / max(steer_limit_now, 0.001)
+
+	lowgear_slide_active = (gear <= 2) \
+		&& (steer_norm > LG_STEER_THRESHOLD) \
+		&& (speed_kmh > LG_SLIDE_MIN_SPEED_KMH) \
+		&& (not drifting)
+
+	var target_front: float = BASE_TIRE_GRIP
+	var target_rear: float = BASE_TIRE_GRIP
+
+	if lowgear_slide_active:
+		var steer_fac: float = clamp((steer_norm - LG_STEER_THRESHOLD) / (1.0 - LG_STEER_THRESHOLD), 0.0, 1.0)
+		var speed_fac: float = clamp((speed_kmh - LG_SLIDE_MIN_SPEED_KMH) / 40.0, 0.0, 1.0)
+		var blend: float = steer_fac * speed_fac
+		target_front = lerp(BASE_TIRE_GRIP, LG_FRONT_SLIP, blend)
+		target_rear  = lerp(BASE_TIRE_GRIP, LG_REAR_SLIP,  blend)
+
+	# Apply slide targets (do this BEFORE stability so stability can add front bite without killing rear slide)
+	for child in get_children():
+		if child is VehicleWheel3D:
+			var w: VehicleWheel3D = child
+			var cur: float = w.wheel_friction_slip
+			var trg: float = (target_front if w.use_as_steering else target_rear)
+			w.wheel_friction_slip = lerp(cur, trg, clamp(LG_BLEND_SPEED * delta, 0.0, 1.0))
+
 	# ---------------- Throttle / Reverse ----------------
 	var fwd_mps: float = transform.basis.x.x
 	var accel_input: bool = Input.is_action_pressed("ui_down")
@@ -173,18 +209,19 @@ func _physics_process(delta: float) -> void:
 	var effective_top_kmh: float = min(gear_top_kmh, ABS_TOP_SPEED_KMH)
 
 	# ---------------- Engine / RPM model ----------------
+	# RPM tied to current gear's top speed (simple final-drive model)
 	var speed_ratio: float = 0.0
 	if gear_top_kmh > 0.0:
 		speed_ratio = clamp(speed_kmh / gear_top_kmh, 0.0, 1.0)
-	target_rpm = max(IDLE_RPM, lerp(MIN_DRIVE_RPM, REDLINE_RPM, speed_ratio))
 
+	target_rpm = max(IDLE_RPM, lerp(MIN_DRIVE_RPM, REDLINE_RPM, speed_ratio))
 	if speed_kmh < 1.0 and not accel_input and not reverse_input:
 		target_rpm = IDLE_RPM
 
 	var rpm_lerp_t: float = clamp(10.0 * delta, 0.0, 1.0)
 	engine_rpm = lerp(engine_rpm, target_rpm, rpm_lerp_t)
 
-	# --- Bark on high RPM (every 1s above 7800 RPM) ---
+	# --- Bark on high RPM ---
 	if engine_rpm > BARK_RPM_THRESHOLD:
 		bark_timer += delta
 		if bark_timer >= BARK_INTERVAL:
@@ -194,7 +231,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		bark_timer = 0.0
 
-	# ---------------- Auto shifting (shifts even under throttle) ----------------
+	# ---------------- Auto shifting ----------------
 	if is_automatic and shift_cooldown <= 0.0:
 		var current_top_kmh: float = GEARS_MAX_KMH[gear - 1]
 		var near_gear_top: bool = speed_kmh >= (current_top_kmh * AUTO_UP_AT_TOP_RATIO)
@@ -211,16 +248,33 @@ func _physics_process(delta: float) -> void:
 		EngineSound.pitch_scale = pitch
 
 	# ---------------- Apply forces ----------------
-	var torque_scale: float = _torque_curve(engine_rpm)
+	var torque_scale: float = _torque_curve(engine_rpm)  # basic engine curve
 	var gear_mul: float = GEAR_TORQUE_MULT[gear - 1] * GEAR_TORQUE_SCALE
 	var headroom: float = clamp(1.0 - speed_ratio, 0.0, 1.0)
 	var aero_taper: float = clamp(1.0 - (speed_kmh / 300.0), 0.5, 1.0)
 
+	# --- NEW: bog/torque fade at low rpm + extra cut in tall gears ---
+	var low_rpm_factor: float
+	if BOG_RPM_END > IDLE_RPM:
+		low_rpm_factor = clamp((engine_rpm - IDLE_RPM) / (BOG_RPM_END - IDLE_RPM), 0.0, 1.0)
+	else:
+		low_rpm_factor = 1.0
+	low_rpm_factor = pow(low_rpm_factor, BOG_POWER)
+
+	var tall_gear_cut: float = GEAR_BOG_FACTOR[gear - 1]  # <=1.0; 5th is much weaker
+
 	if accel_input:
-		var drive_force: float = THROTTLE_FORCE * torque_scale * gear_mul * headroom * aero_taper
+		var drive_force: float = THROTTLE_FORCE \
+			* torque_scale \
+			* gear_mul \
+			* headroom \
+			* aero_taper \
+			* low_rpm_factor \
+			* tall_gear_cut
 		engine_force = drive_force
 		brake = 0.0
 	elif reverse_input:
+		# reverse still limited; keep it reasonable
 		if fwd_mps >= -1.0:
 			engine_force = -THROTTLE_FORCE * 0.9 * 1.6
 			brake = 0.0
@@ -230,10 +284,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		engine_force = 0.0
 		brake = 0.0
-		
-		
 
-	# ---------------- Drift behavior ----------------
+	# ---------------- Drift (handbrake) behavior ----------------
 	if drifting:
 		brake = max(brake, DRIFT_BRAKE)
 		if has_node("wheal2"):
@@ -250,8 +302,8 @@ func _physics_process(delta: float) -> void:
 			$wheal3.wheel_friction_slip = 3.0
 
 	was_drifting = drifting
-	
-	# >>> Stability assist (prevents total loss of control but keeps some slide)
+
+	# >>> Stability assist (won't kill rear slide if lowgear_slide_active)
 	_stability_assist(drifting, accel_input, delta)
 
 	# ---------------- Tachometer Needle ----------------
@@ -267,9 +319,10 @@ func _physics_process(delta: float) -> void:
 	_update_hud_gear()
 	_update_hud_mode()
 
-	# downhill protection (skip while smoothing a downshift)
+	# Downhill protection (skip while smoothing a downshift)
 	if downshift_allowed_kmh < 0.0 and speed_kmh > effective_top_kmh + 0.5:
 		brake = max(brake, 0.1)
+
 
 func _stability_assist(drifting: bool, accel_input: bool, delta: float) -> void:
 	# Local axes
@@ -289,13 +342,18 @@ func _stability_assist(drifting: bool, accel_input: bool, delta: float) -> void:
 	if accel_input and slip_ratio > 0.3:
 		engine_force *= (1.0 - slip_ratio * TC_GAIN)
 
-	# 2b) Ramp tire grip UP as you slide (unless holding drift)
-	#    Higher wheel_friction_slip == more grip in Godot.
+	# 2b) Ramp tire grip UP as you slide
 	var target_grip: float = BASE_TIRE_GRIP + STABILITY_EXTRA_GRIP * slip_ratio
 	if not drifting:
 		for child in get_children():
 			if child is VehicleWheel3D:
-				(child as VehicleWheel3D).wheel_friction_slip = target_grip
+				var w: VehicleWheel3D = child
+				if lowgear_slide_active:
+					# fronts can gain bite, keep rear slip from low-gear assist
+					if w.use_as_steering:
+						w.wheel_friction_slip = max(w.wheel_friction_slip, target_grip)
+				else:
+					w.wheel_friction_slip = target_grip
 
 	# 2c) Extra yaw damping when very sideways (helps the car “catch” itself)
 	var t: float = clamp((speed_kmh - STABILITY_KICKIN_KMH) / 80.0, 0.0, 1.0)
@@ -307,7 +365,7 @@ func _stability_assist(drifting: bool, accel_input: bool, delta: float) -> void:
 	if lat_speed > max_lat:
 		var lat_vec: Vector3 = right * v.dot(right)   # signed lateral component
 		var excess: float = (lat_speed - max_lat) / lat_speed
-		linear_velocity = v - lat_vec * excess * 0.85 # 0.85 keeps it smooth (not snappy)
+		linear_velocity = v - lat_vec * excess * 0.85
 
 
 # ===================== PHYSICS CAP =====================
@@ -354,6 +412,7 @@ func _shift_down() -> void:
 			downshift_to_kmh = new_top
 			downshift_allowed_kmh = downshift_from_kmh
 
+# torque curve (broad powerband peaking ~70% of redline)
 func _torque_curve(rpm: float) -> float:
 	var x: float = clamp(rpm / REDLINE_RPM, 0.0, 1.0)
 	var peak: float = 0.7
@@ -361,10 +420,12 @@ func _torque_curve(rpm: float) -> float:
 	var val: float = 1.0 - pow(abs(x - peak) / width, 2.0)
 	return clamp(val, 0.2, 1.0)
 
+# tach needle mapping
 func _rpm_to_deg(rpm: float) -> float:
 	var r: float = clamp(rpm, 0.0, TACH_MAX_RPM)
 	return (r / TACH_MAX_RPM) * TACH_SWEEP_DEG + TACH_OFFSET_DEG
 
+# HUD helpers
 func _update_hud_gear() -> void:
 	if has_node("Hud/gear"):
 		$Hud/gear.text = str(gear)
