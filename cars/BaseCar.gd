@@ -10,10 +10,10 @@ extends VehicleBody3D
 @export var HIGH_SPEED_STEER_MIN: float = 0.35     # 35% of base steer at HIGH_SPEED_KMH
 
 # --- Drift tuning (Space key / ui_select) ---
-@export var DRIFT_BRAKE: float = 0.25
-@export var DRIFT_STEER_LIMIT: float = 0.45
-@export var DRIFT_STEER_SPEED: float = 0.8
-@export var DRIFT_REAR_SLIP: float = 0.3
+@export var DRIFT_BRAKE: float = 0.5
+@export var DRIFT_STEER_LIMIT: float = 0.7
+@export var DRIFT_STEER_SPEED: float = 1.2
+@export var DRIFT_REAR_SLIP: float = 0.8
 
 # Stronger in lower gears, weaker in higher gears
 const GEAR_TORQUE_MULT: Array[float] = [3.0, 2.1, 1.6, 1.25, 1.0]
@@ -55,12 +55,25 @@ var shift_cooldown: float = 0.0
 @onready var EngineSound: AudioStreamPlayer = $EngineSound
 @onready var ScreechSound: AudioStreamPlayer = $ScreechSound
 
-# >>> Bark sound (plays every 1s above 7800 RPM)
-const BARK_RPM_THRESHOLD: float = 7800.0
-const BARK_INTERVAL: float = 1.0
+# >>> Bark sound (plays every .75s above 7800 RPM)
+const BARK_RPM_THRESHOLD: float = 7500.0
+const BARK_INTERVAL: float = 0.75
 const BARK_STREAM: AudioStream = preload("res://sounds/bark.mp3")
 var bark_timer: float = 0.0
 var BarkSound: AudioStreamPlayer
+
+# --- Stability / anti-spin assist (arcade-friendly) ---
+@export var BASE_TIRE_GRIP: float = 3.0           # normal wheel_friction_slip when not drifting
+@export var STABILITY_EXTRA_GRIP: float = 2.0      # extra grip added when you start sliding
+@export var STABILITY_KICKIN_KMH: float = 35.0     # assist starts fading in above this speed
+
+@export var LATERAL_CAP_MIN: float = 4.0           # m/s sideways allowed at low speed
+@export var LATERAL_CAP_MAX: float = 12.0          # m/s sideways allowed at high speed
+
+@export var TC_GAIN: float = 0.45                  # traction control strength (cuts engine_force under big slip)
+@export var YAW_DAMP_BASE: float = 0.2             # baseline angular damping
+@export var YAW_DAMP_MAX: float = 2.2              # angular damping when very sideways
+
 
 # --- Tachometer (needle rotation: 0deg at 0rpm, +240deg at 8000rpm) ---
 @export var TACH_SWEEP_DEG: float = 240.0
@@ -94,6 +107,9 @@ func _ready() -> void:
 		EngineSound.play()
 	if TachNeedle == null:
 		push_warning("Tach needle path not found: " + str(tach_needle_path))
+		
+	linear_damp = 0.08    # slows down forward movement
+	angular_damp = 0.2   # helps reduce spin-outs
 	_update_hud_mode()
 	_update_hud_gear()
 
@@ -224,6 +240,9 @@ func _physics_process(delta: float) -> void:
 			$wheal3.wheel_friction_slip = 3.0
 
 	was_drifting = drifting
+	
+	# >>> Stability assist (prevents total loss of control but keeps some slide)
+	_stability_assist(drifting, accel_input, delta)
 
 	# ---------------- Tachometer Needle ----------------
 	if is_instance_valid(TachNeedle):
@@ -241,6 +260,45 @@ func _physics_process(delta: float) -> void:
 	# downhill protection (skip while smoothing a downshift)
 	if downshift_allowed_kmh < 0.0 and speed_kmh > effective_top_kmh + 0.5:
 		brake = max(brake, 0.1)
+
+func _stability_assist(drifting: bool, accel_input: bool, delta: float) -> void:
+	# Local axes
+	var forward: Vector3 = -transform.basis.z.normalized()
+	var right: Vector3 =  transform.basis.x.normalized()
+
+	var v: Vector3 = linear_velocity
+	var speed_mps: float = v.length()
+	var speed_kmh: float = speed_mps * 3.6
+
+	# Sideways (lateral) velocity
+	var lat_speed: float = abs(v.dot(right))           # m/s sideways
+	var slip_ref: float = max(1.5, 0.22 * speed_mps + 2.0) # grows with speed
+	var slip_ratio: float = clamp(lat_speed / slip_ref, 0.0, 1.0)
+
+	# 2a) Traction control: reduce engine push when super sideways (but keep some drive)
+	if accel_input and slip_ratio > 0.3:
+		engine_force *= (1.0 - slip_ratio * TC_GAIN)
+
+	# 2b) Ramp tire grip UP as you slide (unless holding drift)
+	#    Higher wheel_friction_slip == more grip in Godot.
+	var target_grip: float = BASE_TIRE_GRIP + STABILITY_EXTRA_GRIP * slip_ratio
+	if not drifting:
+		for child in get_children():
+			if child is VehicleWheel3D:
+				(child as VehicleWheel3D).wheel_friction_slip = target_grip
+
+	# 2c) Extra yaw damping when very sideways (helps the car “catch” itself)
+	var t: float = clamp((speed_kmh - STABILITY_KICKIN_KMH) / 80.0, 0.0, 1.0)
+	var yaw_damp: float = lerp(YAW_DAMP_BASE, YAW_DAMP_MAX, max(t, slip_ratio))
+	angular_damp = yaw_damp
+
+	# 2d) Soft cap on sideways velocity (keeps the tail from running away forever)
+	var max_lat: float = lerp(LATERAL_CAP_MIN, LATERAL_CAP_MAX, clamp(speed_kmh / 200.0, 0.0, 1.0))
+	if lat_speed > max_lat:
+		var lat_vec: Vector3 = right * v.dot(right)   # signed lateral component
+		var excess: float = (lat_speed - max_lat) / lat_speed
+		linear_velocity = v - lat_vec * excess * 0.85 # 0.85 keeps it smooth (not snappy)
+
 
 # ===================== PHYSICS CAP =====================
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
