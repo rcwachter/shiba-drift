@@ -83,6 +83,14 @@ var BarkSound: AudioStreamPlayer
 @export var tach_needle_path: NodePath = ^"Hud/Tachiometer/Needle"
 @onready var TachNeedle: Node2D = get_node_or_null(tach_needle_path)
 
+# --- Low-gear slide assist (turn-to-drift in gears 1-2) ---
+@export var LG_SLIDE_MIN_SPEED_KMH: float = 20.0   # only enable slide above this speed
+@export var LG_STEER_THRESHOLD: float = 0.12       # how much steer before we start sliding (0..1 of max)
+@export var LG_REAR_SLIP: float = 1.3              # lower than BASE_TIRE_GRIP = less rear grip (more slide)
+@export var LG_FRONT_SLIP: float = 3.2             # slightly above base = better front bite/steer control
+@export var LG_BLEND_SPEED: float = 8.0            # how fast the wheels blend to targets
+
+
 # --- State ---
 var steer_target: float = 0.0
 var was_drifting: bool = false
@@ -222,6 +230,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		engine_force = 0.0
 		brake = 0.0
+		
+		
 
 	# ---------------- Drift behavior ----------------
 	if drifting:
