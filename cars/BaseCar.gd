@@ -29,7 +29,7 @@ var downshift_to_kmh: float = 0.0
 var downshift_allowed_kmh: float = -1.0  # -1 = inactive
 
 # --- Engine / gearbox ---
-const GEARS_MAX_KMH: Array[float] = [51.0, 90.0, 132.0, 183.0, 212.0] # 1..5 tops
+const GEARS_MAX_KMH: Array[float] = [41.0, 87.0, 120.0, 145.0, 177.0]
 const REDLINE_RPM: float = 8000.0
 const IDLE_RPM: float = 1000.0
 const MIN_DRIVE_RPM: float = 1200.0
@@ -119,8 +119,8 @@ func _ready() -> void:
 		EngineSound.play()
 	if TachNeedle == null:
 		push_warning("Tach needle path not found: " + str(tach_needle_path))
-	linear_damp = 0.15
-	angular_damp = 0.3
+	linear_damp = 0.1
+	angular_damp = 0.2
 	_update_hud_mode()
 	_update_hud_gear()
 
