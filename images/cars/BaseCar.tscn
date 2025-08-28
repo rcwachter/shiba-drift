@@ -65,7 +65,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2149, 0)
 
 [node name="Camera3D" parent="look" instance=ExtResource("2_5wm5h")]
 transform = Transform3D(1, 0, 0, 0, 0.974347, 0.225053, 0, -0.225053, 0.974347, 0, 1.97324, 6.19962)
-target_distance = 101
+fov = 60.0
+target_height = 1.5
+speed = 30.0
 
 [node name="Hud" type="CanvasLayer" parent="."]
 layer = 2

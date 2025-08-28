@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://ci52bv1m15cbs"]
+[gd_scene load_steps=14 format=3 uid="uid://ci52bv1m15cbs"]
 
 [ext_resource type="PackedScene" uid="uid://duy0dbkychify" path="res://images/cars/BaseCar.tscn" id="1_cfkas"]
 [ext_resource type="PackedScene" uid="uid://benmjny2guowm" path="res://images/cars/Models/Doge/Wheel.glb" id="2_eoiid"]
@@ -8,7 +8,8 @@
 [ext_resource type="Texture2D" uid="uid://cs4qcvkc87o72" path="res://pngs/tachiometer.png" id="4_08h6l"]
 [ext_resource type="Texture2D" uid="uid://c1mx8fcoujsfd" path="res://pngs/needle.png" id="5_7xqq0"]
 [ext_resource type="AudioStream" uid="uid://bfry3ssp2pckm" path="res://sounds/ae86.mp3" id="6_0hh35"]
-[ext_resource type="AudioStream" uid="uid://b440gicea1mia" path="res://sounds/screech.mp3" id="7_fom6n"]
+[ext_resource type="Texture2D" uid="uid://b5qrvy56thdgc" path="res://pngs/rectangle.png" id="6_7xqq0"]
+[ext_resource type="AudioStream" uid="uid://b440gicea1mia" path="res://sounds/screechlong.mp3" id="7_fom6n"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_n7qdn"]
 radius = 0.252924
@@ -87,9 +88,6 @@ transform = Transform3D(-1.35505e-08, -0.429, 0, 0.31, -1.87522e-08, 0, 0, 0, 0.
 [node name="CollisionShape3D" parent="." index="4"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00866612, 0.827398, 0.722988)
 
-[node name="Camera3D" parent="look" index="0"]
-target_distance = 5.0
-
 [node name="rpm" type="Label" parent="Hud" index="0"]
 visible = false
 anchors_preset = 7
@@ -112,35 +110,62 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 379.4
-offset_top = -167.6
-offset_right = 419.4
-offset_bottom = -98.6
+offset_left = 346.0
+offset_top = -217.0
+offset_right = 386.0
+offset_bottom = -148.0
 grow_horizontal = 2
 grow_vertical = 0
-scale = Vector2(0.75, 0.75)
 theme_override_font_sizes/font_size = 50
 text = "1"
 
-[node name="transmission" type="Label" parent="Hud" index="3"]
+[node name="speed" parent="Hud" index="2"]
+z_index = 1
+offset_left = 449.0
+offset_top = -139.0
+offset_right = 535.0
+offset_bottom = -69.9999
+scale = Vector2(1.08787, 1.22402)
+text = "150"
+horizontal_alignment = 2
+
+[node name="kmh" type="Label" parent="Hud" index="3"]
 z_index = 1
 anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 368.4
-offset_top = -124.6
-offset_right = 660.4
-offset_bottom = -55.6
+offset_left = 546.0
+offset_top = -94.0
+offset_right = 674.0
+offset_bottom = -25.0
 grow_horizontal = 2
 grow_vertical = 0
-scale = Vector2(0.15, 0.15)
+scale = Vector2(0.295389, 0.338198)
 theme_override_font_sizes/font_size = 50
-text = "AUTOMATIC"
+text = "km/h"
+horizontal_alignment = 2
+
+[node name="transmission" type="Label" parent="Hud" index="4"]
+z_index = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 326.0
+offset_top = -163.0
+offset_right = 618.0
+offset_bottom = -94.0
+grow_horizontal = 2
+grow_vertical = 0
+scale = Vector2(0.25, 0.25)
+theme_override_font_sizes/font_size = 50
+text = "MANUAL"
 horizontal_alignment = 1
 
-[node name="Label" parent="Hud" index="4"]
+[node name="Label" parent="Hud" index="5"]
 offset_left = 7.0
 offset_top = 392.0
 offset_right = 422.0
@@ -154,15 +179,20 @@ Press F to toggle manual/
 If manual, use T for upshift
    and G for downshift"
 
-[node name="Tachiometer" type="Sprite2D" parent="Hud" index="5"]
-position = Vector2(999.4, 506.4)
-scale = Vector2(0.2, 0.2)
+[node name="Tachiometer" type="Sprite2D" parent="Hud" index="6"]
+position = Vector2(1045, 541)
+scale = Vector2(0.25, 0.25)
 texture = ExtResource("4_08h6l")
 
 [node name="Needle" type="Sprite2D" parent="Hud/Tachiometer" index="0"]
 z_index = 2
 position = Vector2(3, 10)
 texture = ExtResource("5_7xqq0")
+
+[node name="Rectangle" type="Sprite2D" parent="Hud/Tachiometer" index="1"]
+position = Vector2(458, 338)
+scale = Vector2(1.33799, 1)
+texture = ExtResource("6_7xqq0")
 
 [node name="doge-body" parent="." index="7" instance=ExtResource("3_om8jj")]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 0)

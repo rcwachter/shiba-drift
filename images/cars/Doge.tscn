@@ -6,7 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://bty2rpvw2dh0h" path="res://images/cars/Models/Doge/doge-body.glb" id="3_om8jj"]
 [ext_resource type="PackedScene" uid="uid://dcl6264snvov3" path="res://models/ae86.glb" id="5_mecmv"]
 [ext_resource type="AudioStream" uid="uid://bfry3ssp2pckm" path="res://sounds/ae86.mp3" id="6_d13ey"]
-[ext_resource type="AudioStream" uid="uid://b440gicea1mia" path="res://sounds/screech.mp3" id="7_capwg"]
+[ext_resource type="AudioStream" uid="uid://b440gicea1mia" path="res://sounds/screechlong.mp3" id="7_capwg"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_n7qdn"]
 radius = 0.252924
@@ -77,7 +77,7 @@ transform = Transform3D(-1.35505e-08, -0.429, 0, 0.31, -1.87522e-08, 0, 0, 0, 0.
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00866612, 0.827398, 0.722988)
 
 [node name="Camera3D" parent="look" index="0"]
-target_distance = 5.0
+speed = 40.0
 
 [node name="Label" parent="Hud" index="1"]
 offset_left = 7.0

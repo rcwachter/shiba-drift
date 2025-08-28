@@ -29,7 +29,7 @@ var downshift_to_kmh: float = 0.0
 var downshift_allowed_kmh: float = -1.0  # -1 = inactive
 
 # --- Engine / gearbox ---
-const GEARS_MAX_KMH: Array[float] = [41.0, 87.0, 120.0, 145.0, 177.0]
+const GEARS_MAX_KMH: Array[float] = [44.0, 73.0, 111.0, 156.0, 197.0]
 const REDLINE_RPM: float = 8000.0
 const IDLE_RPM: float = 1000.0
 const MIN_DRIVE_RPM: float = 1200.0
@@ -141,7 +141,8 @@ func _physics_process(delta: float) -> void:
 	var speed_mps: float = linear_velocity.length()
 	var speed_kmh: float = speed_mps * 3.6
 	if has_node("Hud/speed"):
-		$Hud/speed.text = str(round(speed_kmh)) + "  KM/H"
+		$Hud/speed.text = str(int(round(speed_kmh)))
+
 
 	# ---- Downshift smoothing update ----
 	if downshift_smooth_timer > 0.0:
